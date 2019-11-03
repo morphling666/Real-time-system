@@ -2,8 +2,8 @@
 #define S_FUNCTION_LEVEL 2
 
 #include "simstruc.h"
-#include "List.cpp"
-char initfunc[100];
+#include "List.h"
+
 static void mdlInitializeSizes(SimStruct *S)
 {
     ssSetNumSFcnParams(S, 3);
@@ -12,6 +12,7 @@ static void mdlInitializeSizes(SimStruct *S)
     }
     mxArray *rhs[1],*lhs[1];
     const mxArray *arg;
+    char initfunc[100];
     arg=ssGetSFcnParam(S,2);
     int m=(int)mxGetM(arg);
     int n=(int)mxGetN(arg);
@@ -20,8 +21,23 @@ static void mdlInitializeSizes(SimStruct *S)
         mexPrintf("error port numbers,m=%d,n=%d\n",m,n);
         return;
     }
+    Taskchain=new List;
+    Taskchain->Segptr=mxCreateDoubleScalar(0.0);
+    mexMakeArrayPersistent(Taskchain->Segptr);
+    if(mexGetVariablePtr("global","_TaskList")==0)
+    {
+        mxArray *var=mxCreateNumericMatrix(2,1,mxUINT64_CLASS,mxREAL);
+        mexMakeArrayPersistent(var);
+        mexPutVariable("global","_TaskList",var);
+    }
+    Taskchain->TaskListptr=(mxArray *)mexGetVariablePtr("global","_TaskList");
+    if(Taskchain->TaskListptr==NULL)
+    {
+        mexPrintf("no _TaskList found.\n");
+        return;
+    }
+    *((void **)mxGetData(Taskchain->TaskListptr))=(void *)Taskchain;
     mxGetString(ssGetSFcnParam(S, 0), initfunc, 100);
-    strlen(initfunc);
     rhs[0] = (mxArray *)ssGetSFcnParam(S, 1);
     if (mexCallMATLAB(0, NULL, 1,rhs, "sched_init") != 0) {
         mexPrintf(" error\n");
@@ -41,12 +57,12 @@ static void mdlInitializeSizes(SimStruct *S)
     ssSetNumPWork(S, 0);   /* pointer vector */
     ssSetNumModes(S, 0); 
     ssSetNumNonsampledZCs(S, 0);
-    ssSetSimStateCompliance(S, USE_DEFAULT_SIM_STATE);
     /* Take care when specifying exception free code - see sfuntmpl.doc */
-    ssSetOptions(S,  SS_OPTION_EXCEPTION_FREE_CODE);
-    Taskchain.sched();
-    mxDestroyArray(rhs[0]);
-    mxDestroyArray(lhs[0]);
+    ssSetUserData(S,(void *)Taskchain);
+    ssSetOptions(S,SS_OPTION_CALL_TERMINATE_ON_EXIT);
+    Taskchain->sched();
+    //mxDestroyArray(rhs[0]);
+    //mxDestroyArray(lhs[0]);
 }
 
 static void mdlInitializeSampleTimes(SimStruct *S)
@@ -56,6 +72,8 @@ static void mdlInitializeSampleTimes(SimStruct *S)
 }
 static void mdlOutputs(SimStruct *S, int_T tid)
 {
+    Taskchain=(List *)ssGetUserData(S);
+    mexPrintf("out\n");
     int_T i;
     InputRealPtrsType uPtrs = ssGetInputPortRealSignalPtrs(S,0);
     real_T *y1 = ssGetOutputPortRealSignal(S,0);
@@ -66,14 +84,22 @@ static void mdlOutputs(SimStruct *S, int_T tid)
         *y1++ = 2.0 *(*uPtrs[i]);
     }
     for (i=0; i<width2; i++) {
-        if(!Taskchain.size)
-            *y2++ = 4.0*(*uPtrs[i]);
+        if(Taskchain->size)
+            *y2++ = 4.0 *(*uPtrs[i]);
         else
             *y2++ = 3.0 *(*uPtrs[i]);
     }
 }
-static void mdlTerminate(SimStruct *S){}
-
+static void mdlTerminate(SimStruct *S){ 
+    Taskchain = (List *) ssGetUserData(S);
+    mxDestroyArray(Taskchain->Segptr);
+    delete Taskchain;
+    Taskchain = NULL;
+    mxArray* rhs[2];
+    rhs[0] = mxCreateString("global");
+    rhs[1] = mxCreateString("_Taskchain");
+    mexCallMATLAB(0, NULL, 2, rhs, "clear");
+}
 #ifdef MATLAB_MEX_FILE /* Is this file being compiled as a MEX-file? */
 #include "simulink.c" /* MEX-file interface mechanism */
 #else
