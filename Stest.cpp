@@ -22,7 +22,8 @@ static void mdlInitializeSizes(SimStruct *S)
         return;
     }
     Taskchain=new List;
-    mexMakeMemoryPersistent(Taskchain->Segptr);
+    //for(int i=0;i<6;i++)
+        //mexMakeArrayPersistent(Taskchain->Segptr[i]);
     if(mexGetVariablePtr("global","_TaskList")==0)
     {
         mxArray *var=mxCreateNumericMatrix(2,1,mxUINT64_CLASS,mxREAL);
@@ -42,6 +43,8 @@ static void mdlInitializeSizes(SimStruct *S)
         mexPrintf(" error\n");
         return;
     }
+    const int size=Taskchain->size;
+    Taskchain->Segptr=new mxArray*[3*size];
     ssSetNumInputPorts(S, 1);
     ssSetNumOutputPorts(S,2);
     ssSetInputPortDirectFeedThrough(S, 0, 1);
@@ -59,7 +62,6 @@ static void mdlInitializeSizes(SimStruct *S)
     /* Take care when specifying exception free code - see sfuntmpl.doc */
     ssSetUserData(S,(void *)Taskchain);
     ssSetOptions(S,SS_OPTION_CALL_TERMINATE_ON_EXIT);
-    //Taskchain->sched();
     //mxDestroyArray(rhs[0]);
     //mxDestroyArray(lhs[0]);
 }
@@ -79,7 +81,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     real_T *y2 = ssGetOutputPortRealSignal(S,1);
     int_T width1 = ssGetOutputPortWidth(S,0);
     int_T width2 = ssGetOutputPortWidth(S,1);
-    //int taskid=1;
     int taskid=Taskchain->sched();
     for (i=0; i<width1; i++) {
         *y1++ = 2.0 *(*uPtrs[i]);

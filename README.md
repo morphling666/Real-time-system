@@ -1,11 +1,11 @@
 # Real-time-system
-assignment
-the kernel can be used as FIFO
+## Assignment
 
-Init schedule mode with kernel_init("FIFO")
+The kernel can be used as FIFO，FP，RoundRobin and EDF
 
-Create Task with CreateTask(1.0,'test') //test can be replaced with other .m script
+Open .slx file and click the kernel to input 'FIFO' ,'FP','RoundRobin','EDF'.
 
-Other schedule modes will be supported soon
+Create Task with CreateTask(starttime,executetime,deadline,taskname,priority,args) 	(refer to test.m and test1.m, FIFO's priority should be set to -1)
 
-Task API will be updated so use the format above now.
+**note: **starttime and executetime is set according to segments
+
