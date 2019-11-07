@@ -22,8 +22,7 @@ static void mdlInitializeSizes(SimStruct *S)
         return;
     }
     Taskchain=new List;
-    Taskchain->Segptr=mxCreateDoubleScalar(0.0);
-    mexMakeArrayPersistent(Taskchain->Segptr);
+    //mexMakeArrayPersistent(Taskchain->Segptr);
     if(mexGetVariablePtr("global","_TaskList")==0)
     {
         mxArray *var=mxCreateNumericMatrix(2,1,mxUINT64_CLASS,mxREAL);
@@ -39,7 +38,7 @@ static void mdlInitializeSizes(SimStruct *S)
     *((void **)mxGetData(Taskchain->TaskListptr))=(void *)Taskchain;
     mxGetString(ssGetSFcnParam(S, 0), initfunc, 100);
     rhs[0] = (mxArray *)ssGetSFcnParam(S, 1);
-    if (mexCallMATLAB(0, NULL, 1,rhs, "sched_init") != 0) {
+    if (mexCallMATLAB(0, NULL, 1,rhs, initfunc) != 0) {
         mexPrintf(" error\n");
         return;
     }
@@ -67,7 +66,7 @@ static void mdlInitializeSizes(SimStruct *S)
 
 static void mdlInitializeSampleTimes(SimStruct *S)
 {
-    ssSetSampleTime(S, 0, CONTINUOUS_SAMPLE_TIME);
+    ssSetSampleTime(S, 0, 1.0);//CONTINUOUS_SAMPLE_TIME
     ssSetOffsetTime(S, 0, 0.0);
 }
 static void mdlOutputs(SimStruct *S, int_T tid)
@@ -80,19 +79,28 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     real_T *y2 = ssGetOutputPortRealSignal(S,1);
     int_T width1 = ssGetOutputPortWidth(S,0);
     int_T width2 = ssGetOutputPortWidth(S,1);
-    for (i=0; i<width1; i++) {
-        *y1++ = 2.0 *(*uPtrs[i]);
+    switch(Taskchain->mode)
+    {
+    case FIFO:
+    {
+        //Taskchain->sched();
+        for (i=0; i<width1; i++) {
+            *y1++ = 2.0 *(*uPtrs[i]);
+        }
+        for (i=0; i<width2; i++) {
+            *y2++ =(Taskchain->size)*(*uPtrs[i]);
+        }
     }
-    for (i=0; i<width2; i++) {
-        if(Taskchain->size)
-            *y2++ = 4.0 *(*uPtrs[i]);
-        else
-            *y2++ = 3.0 *(*uPtrs[i]);
+        break;
+    default:
+    {
+    }
+        break;
     }
 }
 static void mdlTerminate(SimStruct *S){ 
     Taskchain = (List *) ssGetUserData(S);
-    mxDestroyArray(Taskchain->Segptr);
+    //mxFree(Taskchain->Segptr);
     delete Taskchain;
     Taskchain = NULL;
     mxArray* rhs[2];
