@@ -19,5 +19,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     mxArray *data=mxDuplicateArray(prhs[5]);
     mexMakeArrayPersistent(data);
     ListNode *t=new ListNode(str,starttime,exetime,deadline,priority,data,Taskchain->size+1);
+    mexPrintf("id=%d\n",Taskchain->size+1);
     Taskchain->insert(t);
 }

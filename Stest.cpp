@@ -22,7 +22,7 @@ static void mdlInitializeSizes(SimStruct *S)
         return;
     }
     Taskchain=new List;
-    //mexMakeArrayPersistent(Taskchain->Segptr);
+    mexMakeMemoryPersistent(Taskchain->Segptr);
     if(mexGetVariablePtr("global","_TaskList")==0)
     {
         mxArray *var=mxCreateNumericMatrix(2,1,mxUINT64_CLASS,mxREAL);
@@ -59,7 +59,7 @@ static void mdlInitializeSizes(SimStruct *S)
     /* Take care when specifying exception free code - see sfuntmpl.doc */
     ssSetUserData(S,(void *)Taskchain);
     ssSetOptions(S,SS_OPTION_CALL_TERMINATE_ON_EXIT);
-    Taskchain->sched();
+    //Taskchain->sched();
     //mxDestroyArray(rhs[0]);
     //mxDestroyArray(lhs[0]);
 }
@@ -79,28 +79,19 @@ static void mdlOutputs(SimStruct *S, int_T tid)
     real_T *y2 = ssGetOutputPortRealSignal(S,1);
     int_T width1 = ssGetOutputPortWidth(S,0);
     int_T width2 = ssGetOutputPortWidth(S,1);
-    switch(Taskchain->mode)
-    {
-    case FIFO:
-    {
-        //Taskchain->sched();
-        for (i=0; i<width1; i++) {
-            *y1++ = 2.0 *(*uPtrs[i]);
-        }
-        for (i=0; i<width2; i++) {
-            *y2++ =(Taskchain->size)*(*uPtrs[i]);
-        }
+    //int taskid=1;
+    int taskid=Taskchain->sched();
+    for (i=0; i<width1; i++) {
+        *y1++ = 2.0 *(*uPtrs[i]);
     }
-        break;
-    default:
-    {
-    }
-        break;
+    for (i=0; i<width2; i++) {
+        *y2++ =(taskid)*(*uPtrs[i]);
     }
 }
 static void mdlTerminate(SimStruct *S){ 
     Taskchain = (List *) ssGetUserData(S);
     //mxFree(Taskchain->Segptr);
+    //mxDestroyArray(Taskchain->TaskListptr);
     delete Taskchain;
     Taskchain = NULL;
     mxArray* rhs[2];

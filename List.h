@@ -47,10 +47,10 @@ public:
         tail->succ=nullptr;
         tail->pred=head;
         size=0;
-        timestamp=1;
+        timestamp=0;
         TaskListptr=NULL;
-        Segptr=NULL;
         savesize=0;
+        Segptr=NULL;
     }
     void insert(ListNode *t);
     mxArray *TaskListptr;
@@ -61,7 +61,7 @@ public:
     }
     unsigned mode;
     unsigned size;
-    void sched();
+    int sched();
     ~List()
     {
         removeall();
@@ -71,7 +71,7 @@ private:
     void removeall();
     void rePriority(ListNode *t);
     void segpop(mxArray **array);
-    void execute(mxArray *lh[],mxArray *rh[],int count);
+    void execute(mxArray *lh[],mxArray *rh[]);
     int timestamp;
     ListNode *head;
     ListNode *tail;
@@ -82,13 +82,12 @@ private:
 ListNode *List::remove()
 {
     ListNode *c=currentptr;
-    ListNode *t=currentptr->pred;
-    t->succ=currentptr->succ;
-    currentptr->succ->pred=t;
+    currentptr=currentptr->pred;
+    currentptr->succ=c->succ;
+    c->succ->pred=currentptr;
     c->pred=NULL;
     c->succ=NULL;
     delete c;
-    currentptr=t;
     return currentptr;
 }
 void List::rePriority(ListNode *t)
@@ -127,93 +126,78 @@ void List::insert(ListNode *t)
         tail->pred=t;
     }
     size+=1;
+    currentptr=head->succ;
     mexPrintf("insert done\n");
 }
-void List::execute(mxArray *lh[],mxArray *rh[],int count)
+void List::execute(mxArray *lh[],mxArray *rh[])
 {
-    while(count)
+    mexCallMATLAB(2,lh,2,rh,currentptr->taskname);
+    if(mxGetScalar(lh[0])!=-1)
     {
-        mexCallMATLAB(2,lh,2,rh,currentptr->taskname);
-        rh[0]=lh[0];
-        rh[0]=lh[1];
-        count--;
-    }
-    if(currentptr->exetime>count)
-    {
-        Segptr[savesize]=rh[0];
-        Segptr[savesize+1]=rh[1];
-        savesize+=2;
+        Segptr[savesize]=lh[0];
+        Segptr[savesize+1]=lh[1];
+        Segptr[savesize+2]=mxCreateDoubleScalar(currentptr->taskid);
+        savesize+=3;
     }
 }
 void List::segpop(mxArray **array)
 {
-    if(savesize==0)
+    if((savesize==0)||(currentptr->taskid!=mxGetScalar(Segptr[savesize-1])))
     {
+        mexPrintf("error lh rh\n");
         array[0]=mxCreateDoubleScalar(1);
         array[1]=mxDuplicateArray(currentptr->parameter);
         return;
     }
-    array[0]=mxDuplicateArray(Segptr[savesize-1]);
     array[1]=mxDuplicateArray(Segptr[savesize-2]);
-    savesize-=2;
+    array[0]=mxDuplicateArray(Segptr[savesize-3]);
+    savesize-=3;
+    mexPrintf("savesize=%d\n",savesize);
 }
 
-void List::sched()
+int List::sched()
 {
-    //Segptr=new mxArray*[2*size];
+    if(timestamp==0)
+        Segptr=new mxArray*[3*size];
+    if((timestamp<currentptr->starttime)||(currentptr==tail))
+    {
+        timestamp++;
+        return 0;
+    }
     switch(mode)
     {
     case FIFO:
     {
         mexPrintf("acess FIFO,size=%d\n",size);
-        ListNode *tmp=head->succ;
+        ListNode *tmp=currentptr;
         mxArray *lh[2],*rh[2];
-        while(tmp!=tail)
-        {
-            lh[0]=mxCreateDoubleScalar(1);
-            lh[1]=tmp->parameter;
-            mexPrintf("taskname=%s£¬para=%lf\n",tmp->taskname,mxGetScalar(lh[1]));
-            while(tmp->nextsegment!=-1)
-            {
-                rh[0]=lh[0];
-                rh[1]=lh[1];
-                mexCallMATLAB(2,lh,2,rh,tmp->taskname);
-                mexPrintf("callback succsess,%lf\n",mxGetScalar(lh[1]));
-                tmp->nextsegment=mxGetScalar(lh[0]);
-            }
-            tmp=tmp->succ;
-            //mxDestroyArray(lh[0]);
-            //mxDestroyArray(rh[0]);
-        }
+        segpop(rh);
+        mexPrintf("taskname=%s£¬para=%lf,%lf\n",tmp->taskname,mxGetScalar(rh[0]),mxGetScalar(rh[1]));
+        execute(lh,rh);
+        //return tmp->taskid;
+        tmp->nextsegment=mxGetScalar(lh[0]);
+        timestamp++;
+        mexPrintf("callback succsess,%lf\n",mxGetScalar(lh[1]));
+        int taskid=tmp->taskid;
+        if(tmp->nextsegment==-1)
+            currentptr=currentptr->succ;
+        return taskid;
+        //mxDestroyArray(lh[0]);
+        //mxDestroyArray(rh[0]);
     }
     break;
     case FP:
     {
         mexPrintf("acess FP,size=%d\n",size);
-        ListNode *tmp=head->succ;
+        ListNode *tmp=currentptr;
         mxArray *lh[2],*rh[2];
-        while(tmp!=tail&&tmp->succ!=tail)
-        {
-            currentptr=tmp;
-            segpop(rh);
-            if(tmp->priority<=tmp->succ->priority)
-            {
-                execute(lh,rh,tmp->exetime);
-                timestamp=tmp->starttime+tmp->exetime;
-                tmp=remove();
-            }
-            else
-            {
-                int gap=tmp->succ->starttime-timestamp;
-                execute(lh,rh,gap);
-                tmp=tmp->succ;
-            }
-            //mxDestroyArray(lh[0]);
-            //mxDestroyArray(rh[0]);
-        }
-        currentptr=tmp;
         segpop(rh);
-        execute(lh,rh,tmp->exetime);
+        execute(lh,rh);
+        tmp->nextsegment=mxGetScalar(lh[0]);
+        int taskid=tmp->taskid;
+        if(tmp->nextsegment==-1)
+            currentptr=remove();
+        return taskid;
     }
     break;
     case RoundRobin:
@@ -229,9 +213,10 @@ void List::sched()
     default:
     {
         mexPrintf("Error Schedule Mode\n");
-        return;
+        return 1;
     }
     }
+    return 0;
 }
 void List::removeall()
 {
